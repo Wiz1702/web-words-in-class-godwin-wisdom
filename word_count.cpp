@@ -6,6 +6,8 @@
 #include <sstream>
 #include <cctype>
 #include <curl/curl.h>
+#include <unordered_set>
+#include <fstream>
 
 using namespace std;
 
@@ -22,13 +24,13 @@ string fetchWebPage(const string& url) {
     string data;
 
     curl = curl_easy_init();
-    if(curl) {
+    if (curl) {
         curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &data);
         res = curl_easy_perform(curl);
         curl_easy_cleanup(curl);
-        if(res != CURLE_OK) {
+        if (res != CURLE_OK) {
             cerr << "curl_easy_perform() failed: " << curl_easy_strerror(res) << endl;
             return "";
         }
@@ -54,8 +56,23 @@ string removeHTMLTags(const string& content) {
     return result;
 }
 
+// Function to load words from a file into a set
+unordered_set<string> loadWordsFromFile(const string& filename) {
+    unordered_set<string> words;
+    ifstream file(filename);
+    string word;
+
+    while (file >> word) {
+        // Optionally, you can transform words to lowercase to make the comparison case-insensitive
+        transform(word.begin(), word.end(), word.begin(), ::tolower);
+        words.insert(word);
+    }
+
+    return words;
+}
+
 // Function to process the web page content and count words
-void countWords(const string& content, map<string, int>& wordCount) {
+void countWords(const string& content, const unordered_set<string>& validWords, map<string, int>& wordCount) {
     stringstream ss(content);
     string word;
 
@@ -63,7 +80,7 @@ void countWords(const string& content, map<string, int>& wordCount) {
         // Remove punctuation and convert to lowercase
         word.erase(remove_if(word.begin(), word.end(), ::ispunct), word.end());
         transform(word.begin(), word.end(), word.begin(), ::tolower);
-        if (!word.empty()) {
+        if (!word.empty() && validWords.find(word) != validWords.end()) {
             wordCount[word]++;
         }
     }
@@ -97,6 +114,9 @@ int main() {
     cout << "Enter the URL of the web page: ";
     getline(cin, url);
 
+    // Load valid words from the file into a set
+    unordered_set<string> validWords = loadWordsFromFile("words.txt");
+
     string content = fetchWebPage(url);
     if (content.empty()) {
         cerr << "Failed to fetch content from URL." << endl;
@@ -108,7 +128,7 @@ int main() {
 
     // Word counting
     map<string, int> wordCount;
-    countWords(cleanContent, wordCount);
+    countWords(cleanContent, validWords, wordCount);
 
     cout << "\nWord counts (ascending order):" << endl;
     displayWordCounts(wordCount);
